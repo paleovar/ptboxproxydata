@@ -1,0 +1,655 @@
+---
+title: "How to use PTBoxProxydata and the S3 classes `ProxyDataManager`, `Proxytibble`, and `Proxyzoo`"
+author: 
+- Moritz Adam
+- Nils Weitzel
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_vignette:
+      toc: true
+      toc_depth: 2
+vignette: >
+  %\VignetteIndexEntry{How to use PTBoxProxydata}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+
+# Introduction
+`PTBoxProxydata` is part of `PTBox`, a set of packages which provides tools for paleo data analysis and visualization.
+`PTBox` builds upon a set of data conventions for paleo data. `PTBoxProxydata` provides the implementation of these data conventions.
+
+This vignette:
+
+- describes how `PTBoxProxydata` can be installed and configured on different machines to suit user needs best,
+- introduces the S3 classes `ProxyDataManager`, `Proxytibble`, and `Proxyzoo` around which all `PTBox` functions are built,
+- gives a set of examples how objects and functions of `PTBoxProxydata` and `PTBox` can be used for efficient paleo data analysis,
+- and provides a step-by-step guide how you can integrate your own datasets into the `PTBox conventions`.
+
+For more details on:
+
+- the available base-level processing tools, see `vignette('PTBoxproxytools-howto')` (`PTBoxProxytools` has to be installed)
+
+
+# Installing and configuring `PTBoxProxydata`
+
+## Installing
+Installation of `PTBoxProxydata` works as any other R package that is hosted on a remote git repository:
+
+```{r, eval=FALSE}
+require(devtools)
+devtools::install_git("https://github.com/paleovar/PTBoxProxydata", build_vignettes = TRUE)
+```
+
+
+## Configuring
+
+### Config file {#config_file}
+Apart from two small test data sets (`?PTBoxProxydata::manager_load_icecore_testset` and `?PTBoxProxydata::manager_load_monticchio_testset`), the paleo data handled by `PTBoxProxydata` is external to the package. This is why, usually the package has to be configured to suit the way the user has stored this data on their system and to handle the meta data of different datasets correctly. 
+
+Configuring the package is very simple. The only thing to do is to open the packages' config file to provide the paths to your data directory along with the required meta data. There are three ways to do so:
+
+1. *(This is the recommended way for usual production.)* If the package has been installed with `devtools::install_git` as described above, copy the default config file (located in the installation directory of PTBoxProxydata, usually this is `~/R/[library folder, for example: x86_64-pc-linux-gnu-library]/[R version, for example: 3.6]/PTBoxProxydata/inst/extdata/PTBoxProxydata-config.yml`) to a location of your choice. The config file is supposed to be self-explanatory. Add an entry for the system you are working on and modify those entries that need to be changed for your setup/data. All other entries in the config file will be taken from the configuration `default`. When loading the package with `library("PTBoxProxydata")` in an R environment, you have to provide the path to your modified version of the config file to the package:
+
+```{r, eval=TRUE}
+# import PTBoxProxydata
+library(PTBoxProxydata)
+# import `%>%` for convenience
+library(magrittr)
+```
+```{r, eval=TRUE}
+# print current config path
+PTBoxProxydata_print_config_path()
+```
+```{r, eval=FALSE}
+# set a config file
+new_config_file <- 'my/new/config/path/PTBoxProxydata-config.yml'
+PTBoxProxydata_reload_config(config_path = new_config_file,
+                             config = 'my_machine')
+```
+
+> Make sure that the top-level name of your entry conforms to the output of R's `Sys.info()[['nodename']]` on your system if you don't specify the argument `config` of `PTBoxProxydata_reload_config`. For example, if the output to this call is `my_machine`, the config file entry relating to your system is supposed to start with `my_machine:` as well.
+
+> Also note that .yml files are intent-sensitive. This means that each hierarchical level in the PTBoxProxydata-config.yml file is indicated by *exactly 2* blanks.
+
+2. Alternatively, edit the default config file directly. However, this is not advised unless you are familiar with the package as you might accidentally destroy the default config file and have to obtain it again from the git source.
+
+3. When modifying/developing the package using `devtools::load_all` or if you have obtained the package by cloning/fetching from the git repository, the default config file is instead located in `path/to/the/repository/PTBoxProxydata/inst/extdata/PTBoxProxydata-config.yml`. From here, proceed as described in (1) or (2).
+
+The whole package configuration can also be accessed as a list within R:
+```{r, eval=FALSE}
+# print config (not done here because that would be too crowded)
+PTBoxProxydata_print_config()
+
+# save config as a list
+config_list <- PTBoxProxydata_get_config()
+```
+
+> The general configuration of `PTBoxProxydata` goes into the config file, for example to customize the location where the package will set up data caches, all meta data names, etc. On the other hand, details on the different data sets that should be handled by the package go into the [Master Sheet](#master_sheet).
+
+### Master Sheet {#master_sheet}
+The Master Sheet is a (human-readable) .yml file which represents a database of different paleo data sets. It does not contain the data themselves but all meta data needed for `PTBoxProxydata` to access the data and for handling the datasets in analyses.
+
+An entry in the Master Sheet typically looks like this:
+```{bash, eval=FALSE}
+1:                                                    # <- unique numeric index
+  dataset_name:       ACER                            # <- full name of the dataset
+  dataset_short_name: acer_full                       # <- unique short name (this is the identifier you'd typically use to load a data set in R)
+  dataset_path:       /obs/proxydata/pollen/ACER/datasets # <- path to the data set that is passed to the dataset-specific loading routine
+  dataset_file_type:  csv                             # <- file extension of the dataset's files
+  publication_year:   "2017"                          # <- additional meta data of interest
+  publication_author: Sanchez-Goni et al.             #          "
+  publication_source: Earth System Science Data       #          "
+  publication_doi:    doi.org/10.5194/essd-9-679-2017 #          "
+  publication_web:    NA                              # <- meta data that could be provided but is not available for this dataset
+  bibtex:             NA                              #          "
+  comments:           NA                              #          "
+```
+
+> Based on the Master sheet, `PTBoxProxydata` "knows" about any paleo data set it is supposed to handle. Thus, if you want to a new data set to be supported by the package, you will, first of all, have to add the new dataset's meta data to the Master sheet. See the [Section on integrating your own dataset](#own) for details.
+
+> The default path to the Master sheet can be specified in the config file of `PTBoxProxydata`. This makes it easy to set up `PTBoxProxydata` once on your system and to share datasets with prescribed re-formatting across systems, contributing to the goal of `PTBoxProxydata` to facilitate data managment and reproducibility.
+
+> The Master sheet's default path is similar to the default path of the [config file](#config_file): `~/R/[library folder, for example: x86_64-pc-linux-gnu-library]/[R version, for example: 3.6]/PTBoxProxydata/inst/extdata/PTBoxProxydata_-config_MasterSheet.yml`. Besides adapting this path in the config file, you can also [pass a different Master Sheet to the `ProxydataManager`](#pdm) before loading any dataset.
+
+
+# `PTBoxProxydata::ProxyDataManager` {#pdm}
+
+In R, the `ProxyDataManager` S3 class provides the interface to the different data sets available through `PTBoxProxydata`. Basically, all what the `ProxyDataManager` does is to read the Master Sheet into R and to manage the process of loading, formatting, and caching paleo data internally. In combination with the data conventions of `PTBox`, this makes loading and reformatting paleo data more efficient, well-documented and reproducible.
+For integrating your own dataset, see [the respective Section on integrating a custom dataset](#own). 
+
+> In the examples in this vignette, we use the built-in datasets `icecore_testset` and `monticchio_testset` which come with `PTBoxProxydata`. They can be loaded with the `ProxyDataManager` and don't require any data to be downloaded from external data sources. All steps work analogously with other external datasets that have been properly integrated into the `PTBoxProxydata`.
+
+```{r, eval=TRUE}
+# create a ProxyDataManager instance
+# per default, the ProxyDataManager uses the pre-defined 
+# path to the ProxyDataManager_MasterSheet
+mng <- ProxyDataManager()
+
+## if you want to use non-default Master Sheet
+## create the ProxyDataManager instance as
+# mng <- ProxyDataManager('your/desired/Master_Sheet.yml')
+
+# print info
+print(mng)
+
+## you can export the master sheet
+## to a desired format and location
+## export_master_sheet(PTBoxProxydata, 
+##                     'your/desired/file.csv',
+##                     'csv')
+
+# print extended info on all datasets
+preview_all(mng)
+```
+
+## Loading data with the `ProxyDataManager`
+
+The core function operating on `ProxyDataManager` is `PTBoxProxydata::load_set`. This function allows to load one or several of the supported data sets, returning them as a [`PTBoxProxydata::Proxytibble`](#ptibble). To speed up the process of loading and re-formatting data, `load_set` is caching pre-processed data as `.rds` files using R's `saveRDS` internally. Here is how `load_set` works for a single dataset:
+
+```{r, eval=TRUE}
+# load the icecore_data with default options
+icecore_data <- load_set(mng, 
+                         dataset_names = 'icecore_testset')
+
+# if you re-run this, the data will be read directly
+# from RDS caches instead of reading it from file 
+# and applying all the needed reformatting
+icecore_data <- load_set(mng, 
+                         dataset_names = 'icecore_testset')
+
+# you can still force to override existing .rds caches
+# with the argument `force_file = TRUE`
+icecore_data <- load_set(mng, 
+                         dataset_names = 'icecore_testset',
+                         force_file = TRUE)
+
+# the output of load set is a `Proxytibble`
+print(class(icecore_data))
+print(icecore_data)
+
+## and there is a way to cache one particular dataset
+## or all datasets to .rds without loading the data
+## cache_RDS(mng, 'all', zoo_format = 'zoo')
+## cache_RDS(mng, 'icecore_testset', zoo_format = 'zoo')
+```
+
+The actual time series data is contained in the column `proxy_data` of a `Proxytibble`. `PTBox` supports two different formats of this data: `zoo::zoo` objects and `PTBoxProxydata::Proxyzoo` objects. [The Section on `Proxyzoo`](#pzoo) explains the differences and benefits of the two ojects in detail. You can control the data format of a `Proxytibble`s `proxy_data` column with the argument `zoo_format`:
+
+```{r, eval=TRUE}
+# `zoo` format (also default)
+icecore_data <- load_set(mng, 
+                         dataset_names = 'icecore_testset',
+                         zoo_format = 'zoo')
+head(icecore_data$proxy_data[[1]],3)
+
+# `Proxyzoo` format
+icecore_data <- load_set(mng, 
+                         dataset_names = 'icecore_testset',
+                         zoo_format = 'Proxyzoo')
+head(icecore_data$proxy_data[[1]],3)
+```
+
+## Loading data from multiple data sets with the `ProxyDataManager`
+
+The benefit of using one common data format for different paleo data sets is apparent when using data from multiple sources. This is how `ProxyDataManager` works for multiple data sets:
+
+```{r, eval=TRUE}
+# load the icecore_testset and monticchio_testset
+# in common PTBox conventions
+# only using the mandatory attributes
+ice_and_pollen <- load_set(mng, 
+                           dataset_names = c('icecore_testset', 'monticchio_testset'),
+                           only_mandatory_attr = TRUE) # <- only use the mandatory attributes
+print(ice_and_pollen)
+
+# now use all available data set metadata
+ice_and_pollen2 <- load_set(mng, 
+                           dataset_names = c('icecore_testset', 'monticchio_testset'),
+                           only_mandatory_attr = FALSE) # <- use all available metadata
+print(ice_and_pollen2)
+```
+
+> Some data sets may provide (a lot) more meta data than is mandatory within the conventions of `PTBox`. The behaviour can be controlled with the flag `only_mandatory_attr` of `load_set`.
+
+## Filter loading with the `ProxyDataManager`
+
+With `load_set` it is also possible to filter data sets for specific proxy variable names while loading the data:
+
+```{r, eval=TRUE}
+# filter the proxy data for the `d18O_corr2` data
+icecore_data_d18O <- load_set(mng, 
+                              dataset_names = 'icecore_testset',
+                              proxy_names = c('d18O'))
+```
+Filter loading is particularly useful for large data compilations to reduce memory load and processing times in R. Internally, filter loading relies on another meta data sheet that is updated by `PTBoxProxydata` whenever `load_set` reads a data set and saves it to an RDS file.
+
+> **Caution:** Filter loading is operational only for `zoo_format = 'zoo'` at this point. For `zoo_format = 'Proxyzoo'` it will have to be implemented in the future.
+
+> Proxy filtering is possible with a `Proxytibble` object that has already been loaded into your session as well. Use `apply_proxy.Proxytibble(your_Proxytibble_here, fun = select_proxies, proxy_names = your_proxy_names_here) %>% update_proxy_names()`).
+
+# `PTBoxProxydata::Proxytibble` {#ptibble}
+
+The `Proxytibble` S3 class is the output class of the `PTBox::load_set` function and one of the main objects `PTBox` relies on. The other two main objects are `zoo::zoo` and [`Proxyzoo`](#pzoo).
+
+`Proxytibble` builds upon `tibble::tibble` objects, a convenient R data structure. This allows to reuse any `tidyverse` functions on `Proxytibble` objects. `Proxytibble` furthermore implements a data convention for all paleo data sets.
+
+```{r, eval=TRUE}
+# as we saw earlier, `icecore_data` is a `Proxytibble` object
+print(class(icecore_data))
+print(icecore_data)
+```
+
+> In a `Proxytibble`, the meta data of the paleo data is split between meta data of the data set/data compilation (`dataset_id`, `dataset_name`), the different records (`entity_id`, `entity_name`, `site_archive`, `lat`, `lon`, `elev`), and the individual time series (name(s) and unit(s) of the proxy(proxies)).
+
+> No matter which format the original source imposed on the data, all proxy data contained in a `Proxytibble` follows the same conventions. This facilitates writing reusable and dynamical code when analysing paleo data in R.
+
+> See the [Section on adding a custom dataset](#own) for details on how PTBoxProxydata can support your own data sets.
+
+As a `Proxytibble` is a sort of nested `tibble::tibble`, most existing functions that work on a `data.frame`/`tibble::tibble` can be used on a `Proxytibble` as well. This includes data access (`[[]]`, `$`, `dplyr::select`, ..), iterating (`lapply`, `tidyr::map`, ..), and filtering (`dplyr::filter`). Here are some examples:
+
+```{r, eval=TRUE}
+# filter for some archive type
+ice_and_pollen %>% dplyr::filter(site_archive == "icecore")
+```
+
+```{r, eval=TRUE}
+# filter for some latitudinal band
+ice_and_pollen %>% dplyr::filter(lat > 0)
+```
+To deal with the nested proxy data, `PTBoxProxydata` provides helper functions, that allow processing the data in an entire `Proxytibble` at a time: `apply_proxy` and `zoo_apply`, where `apply_proxy` simply wraps around `zoo_apply` to apply it on an entire `Proxytibble`.
+
+```{r, eval=TRUE}
+# overall mean of each archive
+apply_proxy(ice_and_pollen, mean)
+```
+
+```{r, eval=F}
+# mean of each time series
+apply_proxy(ice_and_pollen, function(x) zoo_apply(x, mean))
+```
+
+You can also achieve the same results using `lapply` or `dplyr::mutate` in combination with `purrr::map`.
+
+> Numerous tools for time series processing and analysis come with the `PTBoxProxytools` package. Many of those tools already wrap around `apply_proxy` and `zoo_apply`. In this way, you only have to provide an entire `Proxytibble` as an argument to them. See `vignette("PTBoxProxytools_howto")` for details.
+
+> See [the Section on `Proxyzoo` and `zoo::zoo`](#pzoo) for details on `zoo_apply`.
+
+# `PTBoxProxydata::Proxyzoo` and `zoo::zoo` in `PTBoxProxydata` {#pzoo}
+
+The `Proxyzoo` S3 class extends beyond the capabilities of `zoo::zoo` time series objects. In general, `zoo::zoo` time series are a convenient data structure for processing and analyzing irregular time series, such as paleo data. Many processing routines of `PTBox` use `zoo::zoo` time series as in- and outputs. While `zoo::zoo`'s allow for multivariate paleo data, they are limited to one unique time axis. For several applications and uncertainty quantification however, age model ensembles have to be represented in irregular time series objects, which is where `Proxyzoo` comes into play.
+
+`Proxyzoo` also builds upon `tibble::tibble` objects. `PTBoxProxydata` provides the `zoo_apply` helper function to apply routines that are implemented for `zoo::zoo` time series easily on `Proxyzoo` objects.
+
+```{r, eval=TRUE}
+# a `Proxyzoo`
+pzoo <- icecore_data$proxy_data[[1]]
+print(pzoo)
+print(class(pzoo))
+```
+
+```{r, eval=TRUE}
+# the proxy data of a `Proxyzoo` are easily accessible as:
+# (only print the first lines here)
+head(proxydata(pzoo),3)
+class(proxydata(pzoo))
+# or analogously
+head(pzoo$proxydata,3)
+```
+
+```{r, eval=TRUE}
+# same for the age data (vector in this case)
+head(agedata(pzoo),3)
+head(pzoo$agedata,3)
+```
+```{r, eval=TRUE}
+# the age data statistics
+head(agesumm(pzoo),3)
+head(pzoo$agesumm,3)
+```
+
+```{r, eval=TRUE}
+# and the depth axis or an archive
+head(depth(pzoo),3)
+head(pzoo$depth,3)
+```
+
+
+```{r, eval=TRUE}
+# zoo_applyfix makes it easy to process multivariate data (but the output data needs to have the same dimensions as the input data)
+# in one go, for example
+zoo_applyfix(pzoo, exp)
+```
+
+For details on `zoo_applyfix`, especially for the different ways of handling age model ensembles, see `?zoo_applyfix.Proxyzoo`. Also see the `PTBoxProxytools` package for many processing tools working on `Proxyzoo`.
+
+# Integrating a custom dataset into the `PTBox` conventions {#own}
+
+Let's say you have a new dataset that you want to pair with other pre-formatted data and that you want to make easily available for others (e.g. for group members or for publication) through the `ProxyDataManager`.
+
+Basically, you need to do two things: 
+
+1. tell `PTBoxProxydata` some basic information about the data (name, location on disc, ..) in the [Master Sheet](#master_sheet)
+2. and provide a routine which loads and reformats the data according to the conventions of `PTBoxProxydata`. This means that you have to reshape the data into a `Proxytibble` containing all meta and proxy data. 
+
+> If you follow the workflow outlined below, integrating your dataset should not be too complicated. Some helper functions provided by `PTBoxProxydata` facilitate integrating your dataset. You can also use existing loading functions as a blue print.
+
+## Overview
+
+1. `git clone` the *PTBoxProxydata* package locally and create a new branch to add your code to. See [Cloning `PTBoxProxydata` and creating a new branch](#own_clone) below.
+2. Provide some general information on the dataset, it's path and it's properties in the `ProxyDataManager_MasterSheet`. See [Editing the `ProxyDataManager_MasterSheet.yml`](own_master).
+3. Implement and document a routine that loads your dataset and reshapes it into the `ProxyDataManager`'s conventions. This routine has to provide some mandatory attributes (e.g. the location of every record and a name for it) and can include additional attributes specific to your data. See [Providing a `manager_load_*` routine for `ProxyDataManager()`](own_load).
+4. Create a merge request of the branch with your new `manager_load_*` routine. See [Commiting your changes and creating a merge request for your branch](#own_merge).
+5. Once your routine has been approved on Github and merged into the master branch of `PTBoxProxydata`, re-install the package as described at the very top. See [Re-installing `PTBoxProxydata`](#own_reinstall).
+
+> It's also possible to add support of `PTBoxProxydata` for a data set locally without merging the `manager_load_*` routine into the packages' repository. To do so, follow steps 1-3 and `source()` the file containing your `manager_load_*` routine. When attempting to load your dataset, `PTBoxProxydata` will then use this routine from the `.GlobalEnv`.
+
+## Detailed steps
+
+### Cloning `PTBoxProxydata` and creating a new branch {#own_clone}
+Start a clean R session to prevent interfering with your current work and/or previously installed versions of `PTBoxProxydata`. Then, clone the source code of `PTBoxProxydata` from it's Gitlab repository to a directory of your choice. Finally, create a new branch (`git checkout -b`) following this naming convention: `manager_load_[your_dataset]` where `[your_dataset]` has to equal the `dataset_short_name` specified below and check that you are actually working on it (`git status`).
+
+```
+cd your/directory
+git clone https://github.com/paleovar/PTBoxProxydata
+git checkout -b manager_load_[your_dataset]
+git status
+#> On branch manager_load_[your_dataset]
+#> ...
+```
+
+Now you are set to integrate your dataset.
+
+### Editing the `ProxyDataManager_MasterSheet.yml` {#own_master}
+
+The `ProxyDataManager_MasterSheet.yml` contains all information that is needed by `PTBoxProxydata` to access the stored datasets in the first place ([see above](#master_sheet)). 
+
+> *Careful:* This is a file used by all package instances. Therefore, always use a copy of it for testing.
+
+To add your dataset, first make a copy of the current master sheet to a testing location. Depending on your system, there might be a dedicated location for iteratively updated master sheets. In the SPACY group/STACY project the Master Sheets are typically located here: 
+
+```
+cp /obs/PTBox/PTBoxProxydata/master/ProxyDataManager_MasterSheet.yml /obs/PTBox/PTBoxProxydata/master/testing/ProxyDataManager_MasterSheet_[your intials]_[yyyymmdd].yml
+```
+
+The `ProxyDataManager` conventions require the following metadata to be specified in the `ProxyDataManager_MasterSheet.yml` for *every dataset*:
+
+- `dataset_id`
+- `dataset_name`
+- `dataset_short_name`
+- `dataset_path`
+
+If you can/want, provide these metadata for the dataset that you want to add. They facilitate retrieving and reproducing analyses for other users.
+
+- `publication_year`
+- `publication_author`
+- `publication_source`
+- `publication_doi`
+- `publication_web`
+- `bibtex`
+- `comments`
+
+Note the description of the [Master Sheet above](#master_sheet) and enter the database entry for your dataset. 
+
+> No matter if your dataset contains multiple proxy records at once or not, you have to describe the *data compilation* itself here, not each single record contained inside the compilation. You can provide additional metadata on the individual records later.
+
+> Also note that in `.yml` format it is important to respect the correct indentation of *two blanks* at the beginning of each line corresponding to a lower level. 
+
+In order to have a `ProxyDataManager` running with your added database entry you have to point it to your `ProxyDataManager_MasterSheet_[your intials]_[yyyymmdd].yml`. To test if your new dataset is recognized properly run:
+
+```{r, eval=FALSE}
+# load `PTBoxProxydata` directly from the source code instead
+# of `library(PTBoxProxydata)` because we will use this below
+# once again
+## Note: in some cases you need to provide the path
+## to the cloned `PTBoxProxydata` package as an additional 
+## argument: load_all(path = 'path/to/PTBoxProxydata/clone')
+devtools::load_all()
+
+# create ProxyDataManager and point it to the 
+# testing master sheet extended with a new dataset
+# entry
+master_sheet <- '/obs/PTBox/PTBoxProxydata/master/testing/ProxyDataManager_MasterSheet_[your intials]_[yyyymmdd].yml'
+mng <- ProxyDataManager(master_sheet = master_sheet)
+
+# check the path
+print(mng$master_sheet)
+
+# check that new dataset is recognized
+print(mng$datasets)
+print(dplyr::filter(mng$datasets, dataset_short_name == 'your_dataset_short_name'))
+```
+
+
+### Providing and testing a `manager_load_*` routine for `ProxyDataManager()` {#own_load}
+
+Next, you have to provide a routine (`manager_load_[your_dataset_short_name]`) that opens the data referenced in the `ProxyDataManager_MasterSheet.yml` and reshapes it into the `PTBoxProxydata` conventions, i.e. proxy data contained in `zoo::zoo` or `Proxyzoo`, and a set of entire records contained in a `Proxytibble`.
+
+Your routine will be called with these arguments:
+
+- `file` character, file containing the data (read from `ProxyDataManager_MasterSheet.yml`)
+- `dataset_name` character, short name of the dataset (passed on to `PTBoxProxydata` helpers)
+- `dataset_id` numeric, id of the dataset (passed on to `PTBoxProxydata` helpers)
+- `zoo_format` character, either `zoo` or `Proxyzoo`, the format to be used for storing proxy data (passed on to `PTBoxProxydata` helpers)
+
+`PTBoxProxydata` provides several helpers to make the reformatting as fast as possible to implement. So your task is mainly to ensure that the data is read in correctly and that all mandatory meta data (see below) is provided to `PTBoxProxydata`. `PTBoxProxydata::as_Proxytibble` helps to reshape a data.frame or list to `PTBoxProxydata::Proxytibble` and if you use `data.frame`(s)/`tibble`(s) you will not need to worry about the RDS caches and conversions to `zoo::zoo` or `Proxyzoo` because these are handled by `PTBoxProxydata` itself.
+
+> The naming convention of your routines is essential for the `ProxyDataManager`. In order to be recognized, `dataset_short_name` as specified above has to match with the `manager_load_[your_dataset_short_name]` routine. For example the routine corresponding to the above Master Sheet entry on the `icecore_testset` is named `manager_load_icecore_testset`. 
+
+To make life easy, implement your routine in a new file named `/R/manager_load_[your_dataset_short_name].R` inside the `/R` directory of the repository. 
+
+#### `manager_load_*` skeleton
+
+Here is a skeleton for a manager load function. It is really just supposed to be a sketch. Of course, you don't have to use the standard object creators like `tibble::tibble` or `matrix` but would rather want to build upon the existing format of your data. Therefore, also check out the existing `manager_load_*` routines, like `manager_load_acer_ap_mfa` and `manager_load_pages2k_temp`, or play with `as_Proxytibble` and some dummy data first.
+
+```{r, eval=FALSE}
+#' Load proxy data from My Dataset
+#' for the ProxyDataManager
+#'
+#' .. additional roxygen documentation
+manager_load_[your_dataset_short_name] <- function(file, 
+                                                   dataset_name,
+                                                   dataset_id,
+                                                   zoo_format) {
+
+  # (1) read your data
+  my_dat <- readr::read_csv(..)
+  
+  # (2) either
+  #   (A) organize your data into a data.frame that has a column for 
+  #   meta data entry and rows for each entity, with the proxy
+  #   data and age (model) data stored as a nested tibbles
+  agedat <- list(tibble::tibble(age_model1 = c(1,2,3,..), 
+                                age_model2 = ..),
+                 tibble::tibble(..))
+  proxydat <- list(tibble::tibble(proxy1 = c(1,2,3,..), 
+                                  proxy2 = .., 
+                                  proxy3 = ..),
+                   tibble::tibble(..))
+  dat <- tibble(
+    entity_id = c(1,4,5,8, ..),
+    entity_name = c('name1', 'name2', 'name3', ..),
+    site_archive = ..,
+    lat = ..,
+    lon = ..,
+    elev = ..,
+    proxy_unit = list(c("unit1", "unit2", "unit3")), # for a 3-variate time series
+    !!Proxyzoo_agedata() := agedat,
+    !!Proxytibble_colnames_proxy_data() := proxydat
+  )
+  # (3) call
+  dat <- as_Proxytibble(dat)
+  
+  # or
+  #   (B) organize 
+  #    - your proxy data into a list of matrices where each
+  #      list element corresponds to one archive/record/entity
+  #    - the metadata in a separate data.frame
+  #    - age (model) data into a list of matrices where each
+  #      list element corresponds to one archive/record/entity
+  metadat <- tibble::tibble(
+    entity_id = c(1,4,5,8, ..),
+    entity_name = c('name1', 'name2', 'name3', ..),
+    site_archive = ..,
+    lat = ..,
+    lon = ..,
+    elev = ..,
+    proxy_unit = list(c("unit1", "unit2", "unit3"))
+  )
+  proxydat <- list(matrix(.., ncol=3), matrix(.., ncol=3), ..)
+  agedat <- list(matrix(..,ncol=2), matrix(..,ncol=2)) # for two age models
+  # (3) call
+  dat <- as_Proxytibble(proxydat,metadat,agedat)
+
+  # (4) set the data set name, index and order consistently with the Master Sheet
+  dat <- dat %>% 
+    manager_set_dataset_index(dataset = ., 
+                              dataset_name = dataset_name, 
+                              dataset_id = dataset_id) %>% 
+    manager_set_dataset_order(dataset = .)
+  
+  # (5) done
+  return(dat)
+}
+
+```
+
+> Unless your data is available in `tibble` or `list` structure out of the box, `dplyr::gather`/`dplyr::spread` or `dplyr::pivot_long`/`dplyr::pivot::wide` will almost certainly help you. With this structure you can use `as_Proxytibble`, `manager_set_dataset_index`, and `manager_set_dataset_order` for all additional reformatting into `Proxytibble`.
+
+#### Metadata
+
+The following metadata are to be specified for *every proxy record* contained in a dataset. They have to be provided by the hard-coded `manager_load_*` routines which load the data into the common format.
+
+- `entity_id` (has to be unique for each record in the dataset)
+- `entity_name`
+- `lat`itude
+- `lon`gitude
+- `elev`ation
+- `site_archive`
+
+#### Proxy data
+
+In addition, *every single proxy time series* contained in a proxy record has to provide values, a name, a unit and at least one dating point and/or a depth. They have to be provided as well by the `manager_load_*` routines.
+
+- `proxy_name`
+- `proxy_value`
+- `proxy_unit`
+- `age`
+
+<!-- 
+> **TODO** Some more on the format of proxy data
+-->
+<!--
+As in the skeleton above, it is often easiest to reshape your data into a `data.frame`/`tibble` with one column for each metadata entry, one column `age`, and a column for each of the three sample-wise information. 
+-->
+
+####  Age ensemble data
+
+Often, additional dating uncertainties and/or a set of age models are part of paleo data sets. As explained in [the Section on `Proxyzoo`](#pzoo), this is when you would want to use `Proxyzoo` instead of `zoo::zoo` objects to store all of your data. You can optionally pass age ensemble data to `as_Proxytibble`, as well as summary statistics. 
+
+> Even if you do not supply additional data on age uncertainties or age ensembles, `as_Proxytibble` will nonetheless be able to support the `zoo_format = 'Proxyzoo'`. 
+
+<!-- 
+> **TODO** Some more on the format of age model ens
+-->
+
+<!--
+However, if you do want to supply age ensemble data for `zoo_format == 'Proxyzoo'` your proxy data should have these columns:
+
+- `proxy_name`
+- `proxy_value`
+- `proxy_unit`
+- `depth`
+
+The age ensemble/age uncertainties data has to have a column
+
+- `depth`
+
+and (preferably named) columns for each age model (or whatever you want to store inside `agedata()` of `Proxyzoo`), e.g.
+
+- `age_model1`
+- `age_model2`
+- ...
+
+The order of proxy samples and age models (age uncertainties in the example below) has to match per entity between the two `data.frame`s/`tibble`s. See the `manager_load_*` skeleton and other `manager_load_*` routines for details.
+-->
+
+> *Careful:* If your data contains a hiatus with multiple samples at the same depth, you will be prompted a `zoo` warning and have to keep this in mind for further analyses. At this point we do not have an automated treatment of hiatus'.
+
+### Testing your implementation
+
+Once finished with implementing the hard-coded `manager_load_*`, reload the package inside your R session to test the new routine.
+```{r, eval=FALSE}
+devtools::load_all()
+```
+
+If everything works correctly, you should now be able to access your dataset in a `Proxytibble` convention like this:
+```{r, eval=FALSE}
+mng <- ProxyDataManager(master_sheet = 'path/to/your/working/copy/of/the/master/sheet.yml')
+your_data <- load_set(mng, 
+                      dataset_names = 'your_dataset_short_name',
+                      output_format = 'Proxytibble',
+                      zoo_format = 'zoo',
+                      only_mandatory_attr = FALSE)
+```
+Note that `dataset_names` refers to one or several `dataset_short_names`, do not confuse it with the `dataset_name` that you assigned when setting up the master sheet.
+
+Check if the data is reformatted correctly by having a look into the single data points, e.g.
+```{r, eval=FALSE}
+your_data$proxy_data[[1]] # [[2]], ...
+```
+
+and doing some time series plots for example with `pltfct_base` from above or (for `zoo::zoo`) just like that
+```{r, eval=FALSE}
+plot(your_data$proxy_data[[1]]) # ..[[2]], ...
+```
+
+> If you run into problems that you cannot resolve, commit your changes with a sensible commit message and push them to the repo (on your branch `manager_load_[your_dataset]`) as described below. Then, you can open an issue on the Github repository and include a description of your problem.
+
+### Commiting your changes and creating a merge request for your branch {#own_merge}
+
+Once you've successfully tested the new loading routine with your data set, you need to commit (i.e. save) your changes and create a merge request at `PTBoxProxydata`s Github page to make the new dataset available to all users of the package and outside of your current R session for yourself. Before you do so, copy the Master Sheet that you have used for testing into `inst/extdata`.
+
+In the terminal of your session type
+```
+git status
+#> On branch manager_load_[your_dataset]
+#> ...
+#> Untracked files:
+#> ...
+```
+to make sure that you are on the branch defined above. You should be able to see the `.R` file containing your new routine and the modified Master Sheet listed below `Untracked files:`.
+
+Then, add the changes to git and commit them. Make sure to follow exact pattern of the commit message (simplifies organization and traceability on Github). 
+```
+git add .
+git commit -m "Added manager_load_[your_dataset]"
+```
+
+Push you changes to the repo with
+```
+git push --set-upstream origin manager_load_[your_dataset]
+```
+
+Finally, open the PTBoxProxydata repository on [Github](https://github.com/paleovar/PTBoxProxydata), select "Merge Requests" and hit "New merge request". Then, select your branch `manager_load_[your_dataset]` as "source branch" and "master" as target branch. "paleovar/ptboxproxydata" should be pre-selected as source and target project. Hit "Compare branches and continue". You should change the title to "manager_load_[your_dataset]" and select your user name as "Assignee". Click "Submit merge request" once you are done.
+
+### Re-installing `PTBoxProxydata` {#own_reinstall}
+
+Once your merge request has been accepted into the master branch, you can re-install `PTBoxProxydata` globally as specified at the very beginning of the vignette. If you want to specifically install your branch, this is possible too.
+
+```{r, echo=TRUE, eval=FALSE}
+# Use user-defined branch
+devtools::install_git("https://github.com/paleovar/PTBoxProxydata", build_vignettes = TRUE, branch = 'manager_load_[your_dataset]')
+```
+
+Sometimes, you won't be able to access the PTBoxProxydata help pages after re-installation. This is due to internal handling in R. Restarting your R session normally helps.
+
+# Bug reports and extensions of `PTBoxProxydata`
+You are encouraged to report bugs, propose features or extend the `PTBoxProxydata` package with more datasets and functions on [Github](https://github.com/paleovar/PTBoxProxydata).

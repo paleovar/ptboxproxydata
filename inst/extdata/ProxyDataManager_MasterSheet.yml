@@ -1,0 +1,78 @@
+# This is the Master Sheet for proxy datasets supported by 
+# the `PTBoxProxydata` package.
+# See the comments below and `vignette('PTBoxProxydata_howto')`
+# for more details.
+#
+#
+## Mandatory Metadata
+# attribute   | R data type        | unit            | defined         | where to be specified
+# 
+# dataset_id           numeric       unity             1, Inf            master sheet
+# dataset_name         character	 arbitrary         arbitrary         "
+# dataset_short_name   "        	 "                 "                 "
+# dataset_path         "        	 "                 "                 "
+# dataset_file_type	   "             "                 "                 "
+# --------------------------------------------------------------------------------------
+# entity_id	           numeric	     unity             1, Inf            dataset/input routine
+# entity_name          character	 arbitrary         arbitrary         "
+# lon                  numeric       degrees north     -90, 90           "
+# lat                  numeric       degrees east      -180, 180         "
+# sample_id	           numeric	     arbitrary	       arbitrary         "
+# age	  	           numeric       year BP	       -Inf, Inf         "
+# proxy_name           character     arbitrary         arbitrary         "
+# proxy_unit           character     arbitrary         arbitrary         "
+# proxy                numeric       see proxy_unit    see proxy unit    "
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# 
+## Non-mandatory Metadata
+# publication_year	   numeric       unity             -Inf, Inf         master sheet
+# publication_author   character     arbitrary         arbitrary         "
+# publication_source   "             "                 "                 "
+# publication_doi	   "             "                 "                 "
+# publication_web	   "             "                 "                 "
+# bibtex               "             "                 "                 "
+# comments             "             "                 "                 "
+#
+# one of publication_source, publication_doi, publication_web should be specified
+#
+## Blueprint dataset entry
+# Make sure that you use the right level of indentation! (2 blanks correspond to one level)
+#
+# "Your data set id":                          # dataset_id - has to be unique across all datasets
+#   dataset_name:       "Your data set name"
+#   dataset_short_name: "your_data_set_name"   # non case-sensitive, blanks filled with underscores
+#   dataset_path:       "path/to/datset"       # on STACY machines this will usually start with "/obs"
+#   dataset_file_type:  "csv/txt/tab/xlsx/..."
+#   publication_year:   "0000"                 # quoted!
+#   publication_author: ""
+#   publication_source: ""
+#   publication_doi:    ""
+#   publication_web:    ""
+#   bibtex:             entire bibtex entry
+#   comments:           comment
+
+1:
+  dataset_name:       Ice core data dummy dataset (combining edc_stenni and edml_stenni)
+  dataset_short_name: icecore_testset
+  dataset_path:       R.home()/R/sysdata.rda # <- this path is hard-coded in the package as this data set is a testing dataset
+  dataset_file_type:  rda
+  publication_year:   "2009"
+  publication_author: Stenni et al.
+  publication_source: NA
+  publication_doi:    10.1016/j.quascirev.2009.10.009
+  publication_web:    NA
+  bibtex:             NA
+  comments:           NA
+  
+2:
+  dataset_name:       Arboreal Pollen data dummy dataset (using the Lake Monticchio core from the ACER database)
+  dataset_short_name: monticchio_testset
+  dataset_path:       R.home()/R/sysdata.rda # <- this path is hard-coded in the package as this data set is a testing dataset
+  dataset_file_type:  rda
+  publication_year:   2004; 2017; 2021
+  publication_author: Wulf et al.; Sanchez-Goni et al.; Adam et al.
+  publication_source: Quaternary International; Earth System Science Data; Paleoceanography and Paleoclimatology
+  publication_doi:    doi.org/10.1016/j.quaint.2004.01.028; doi.org/10.5194/essd-9-679-2017; doi.org/10.1029/2021PA004265
+  publication_web:    NA
+  bibtex:             NA
+  comments:           NA

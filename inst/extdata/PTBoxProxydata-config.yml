@@ -1,0 +1,176 @@
+# This is the configuration file for the PTBoyProxydata package
+# In general, this configuration does not need any editing to use the package
+#
+# The parameter that you might want to change to your liking is the 
+# path to the RDS dataset cache (see default: RDS: root_dir: "./path_to_RDS_cache").
+#
+# ! Before editing the configuration read the PTBoxProxydata tutorials carefully. !
+# To access the tutorials install PTBoxProxydata following the README.md and once in RStudio
+# run `vignette("how-to-PTBoxProxydata")`
+#
+# For changes to the `default` (!) configuration add changes 
+# as an entry corresponding to the `hostname`/`nodename`
+# of your machine (see below for example). You can get this
+# name by running `hostname` in bash or `Sys.info()['nodename']` in R.
+# The default configuration is loaded if you make a call to the package
+# in R (either by `library(PTBoxProxydata)` or by `PTBoxProxydata::some_function`).
+# If you add a custom configuration, you only need to replicate yaml parameter fields that you
+# you want to change compared to the `default` configuration. All other parameters will be taken
+# from the `default` configuration automatically.
+#
+# For custom configurations as described in `vignette("how-to-PTBoxProxydata")`
+# add a configuration entry with your custom name and follow the instructions
+# in `vignette("how-to-PTBoxProxydata")`.
+#
+# If you wish to re-define the different column names in the yaml file, refer to
+# `PTBoxProxydata_load_config()` in R/hooks.R for their use.
+#
+default:
+  # config for the Master spreadsheet
+  master:
+    # File Path to the Master spreadsheet
+    # path has to be absolute
+    # ('~' and other environment variables should work, though)
+    path: "DEFAULT"
+    
+    # column names of the `datasets` sheet of the Master spreadsheet
+    col_nms_datasets:
+    - dataset_id
+    - dataset_name
+    - dataset_short_name
+    - dataset_path
+    - dataset_file_type
+    #- dataset_dimensionality
+    - publication_year
+    - publication_author
+    - publication_source
+    - publication_doi
+    - publication_web
+    - bibtex
+    - comments
+    
+    # column types for the `datasets` sheet of the Master spreadsheet
+    col_tps_datasets:
+    - numeric   #dataset_id
+    - text      #dataset_name
+    - text      #dataset_short_name
+    - text      #dataset_path
+    - text      #dataset_file_type
+    #- numeric   #dataset_dimensionality
+    - text      #publication_year
+    - text      #publication_author
+    - text      #publication_source
+    - text      #publication_doi
+    - text      #publication_web
+    - text      #bibtex
+    - text      #comments
+    
+    # previously used for xlsx ----
+    # column types for the `coord_vars_1d` sheet of the Master spreadsheet
+    #col_tps_coord_vars_1d:
+    #- text      #attribute
+    #- numeric   #supported_by
+    #- text      #data_type_R
+    #- text      #unit
+    #- text      #defined
+    #- text      #example
+    # ----
+    
+    # supported export formats for master sheet
+    export_formats:
+    - yml
+    - csv
+    - xlsx
+  
+  # config for the RDS caches of datasets
+  RDS:
+    # root directory of the caches
+    # path has to be absolute 
+    # ('~' and other environment variables should work, though)
+    root_dir: "DEFAULT"
+  
+  # config for proxy metadata cache of datasets
+  proxy_meta:
+    # root directory and file of proxy metadata
+    # path has to be absolute 
+    # ('~' and other environment variables should work, though)
+    root_dir: "DEFAULT"
+    file: "ProxyDataManager_proxy_metadata.csv"
+  
+  # config for the R object output from the PTBoxProxydata package
+  R_output:
+    # supported output formats (in R) that can be generated with th
+    # `ProxyDataManager` class
+    format:
+    - Proxytibble
+    #- tibble_tidy
+  
+  # config for datasets in `Proxytibble` and `tibble` format
+  Proxytibble:
+    # column name conventions for the tibble format of datasets supported by `PTBoxProxydata`
+    
+    ## colnames that are to be supported by every dataset entity
+    mandatory_colnames_ent: &mandatory_colnames_ent
+    - entity_id
+    - entity_name
+    - site_archive
+    - lat
+    - lon
+    - elev
+    - proxy_unit
+    
+    mandatory_colnames_proxy_names: &mandatory_colnames_proxy_names
+    - proxy_name
+    
+    ## colnames which are always contained in the `PTBoxProxydata::Proxytibble`
+    ## i.e. colnames that are to be supported by every dataset
+    mandatory_colnames_core: &mandatory_colnames_core
+    - dataset_id
+    - dataset_name
+    - *mandatory_colnames_ent
+    - *mandatory_colnames_proxy_names
+    
+    ## age colname: standard column in `tibble::tibble`
+    ## format and contained in the `zoo::zoo`/`PTBoxProxydata::Proxyzoo`
+    ## object in column `proxy_data` for the `PTBoxProxydata::Proxytibble`
+    ## format
+    mandatory_colnames_age: &mandatory_colnames_age
+    - age # PTBoxProxydata is only expecting one single item here!
+    
+    ## depth colname: standard column in `tibble::tibble`
+    ## format and contained in the `PTBoxProxydata::Proxyzoo`, `Proxytibble`
+    ## objects
+    mandatory_colnames_depth: &mandatory_colnames_depth
+    - depth # PTBoxProxydata is only expecting one single item here!
+    
+    ## proxy_data colname: denotes the columns of
+    ## `zoo::zoo`/`PTBoxProxydata::Proxyzoo` objects in column `proxy_data`
+    ## for the `PTBoxProxydata::Proxytibble` format
+    mandatory_colnames_proxy_data: &mandatory_colnames_proxy_data
+    - proxy_data # PTBoxProxydata is only expecting one single item here!
+    
+    ## proxy colnames: denote the proxy columns in standard
+    ## `tibble::tibble` format
+    mandatory_colnames_proxy_plane: &mandatory_colnames_proxy_plane
+    - proxy_name
+    - proxy_unit
+    - proxy_value
+    
+    ## for convenience: all colnames for `PTBoxProxydata::Proxytibble` format
+    mandatory_colnames_all_zoo:
+    - *mandatory_colnames_core
+    #- *mandatory_colnames_age
+    - *mandatory_colnames_proxy_data
+    
+    ## for convenience: all colnames for `tibble::tibble` format
+    mandatory_colnames_all_plane:
+    - *mandatory_colnames_core
+    - *mandatory_colnames_age
+    - *mandatory_colnames_proxy_plane
+  
+  # config for the `Proxyzoo` class
+  Proxyzoo:
+    proxydata_name: proxydata
+    agedata_name: agedata
+    agesummary_name: agesumm
+    depth_name: depth
