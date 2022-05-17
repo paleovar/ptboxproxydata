@@ -223,11 +223,11 @@ print(ice_and_pollen2)
 
 With `load_set` it is also possible to filter data sets for specific proxy variable names while loading the data:
 
-```{r, eval=TRUE}
-# filter the proxy data for the `d18O_corr2` data
+```{r, eval=FALSE}
+# filter the proxy data for the `EDCBag_18O` data
 icecore_data_d18O <- load_set(mng, 
                               dataset_names = 'icecore_testset',
-                              proxy_names = c('d18O'))
+                              proxy_names = c('EDCBag_18O'))
 ```
 Filter loading is particularly useful for large data compilations to reduce memory load and processing times in R. Internally, filter loading relies on another meta data sheet that is updated by `PTBoxProxydata` whenever `load_set` reads a data set and saves it to an RDS file.
 
